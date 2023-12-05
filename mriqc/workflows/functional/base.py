@@ -69,7 +69,7 @@ def fmri_qc_workflow(name="funcMRIQC"):
     from niworkflows.interfaces.bids import ReadSidecarJSON
     from niworkflows.interfaces.header import SanitizeImage
     from mriqc.messages import BUILDING_WORKFLOW
-    from mriqc.interfaces.functional import SelectEcho
+    from mriqc.interfaces.functional import SelectEcho, FindPhysio
 
     workflow = pe.Workflow(name=name)
 
@@ -121,13 +121,20 @@ def fmri_qc_workflow(name="funcMRIQC"):
 
     # Workflow --------------------------------------------------------
 
-    # 1. HMC: head motion correct
+    # Find physiological signals in BIDS dataset 
+    physio = pe.MapNode(
+        FindPhysio(layout=config.execution.layout),
+        name = "physio",
+        iterfield=["in_file"],
+    )
+
+    # HMC: head motion correct
     hmcwf = hmc(omp_nthreads=config.nipype.omp_nthreads)
 
     # Set HMC settings
     hmcwf.inputs.inputnode.fd_radius = config.workflow.fd_radius
 
-    # 2. Compute mean fmri
+    # Compute mean fmri
     mean = pe.MapNode(
         TStat(options="-mean", outputtype="NIFTI_GZ"),
         name="mean",
@@ -146,7 +153,7 @@ def fmri_qc_workflow(name="funcMRIQC"):
     # EPI to MNI registration
     ema = epi_mni_align()
 
-    # 7. Compute IQMs
+    # Compute IQMs
     iqmswf = compute_iqms()
     # Reports
     func_report_wf = init_func_report_wf()
@@ -173,6 +180,13 @@ def fmri_qc_workflow(name="funcMRIQC"):
                         ("acquisition", "inputnode.acquisition"),
                         ("reconstruction", "inputnode.reconstruction"),
                         ("run", "inputnode.run")]),
+        (meta, physio, [("out_dict", "metadata"),
+                        (("subject",_pop), "subject_id"),
+                        (("session",_pop), "session_id"),
+                        (("task",_pop), "task_id"),
+                        (("acquisition",_pop), "acq_id"),
+                        (("reconstruction", _pop), "rec_id"),
+                        (("run", _pop), "run_id")]),
         (datalad_get, iqmswf, [("in_file", "inputnode.in_file")]),
         (sanitize, iqmswf, [("out_file", "inputnode.in_ras")]),
         (mean, iqmswf, [("out_file", "inputnode.epi_mean")]),
@@ -187,6 +201,7 @@ def fmri_qc_workflow(name="funcMRIQC"):
         (sanitize, func_report_wf, [("out_file", "inputnode.in_ras")]),
         (mean, func_report_wf, [("out_file", "inputnode.epi_mean")]),
         (tsnr, func_report_wf, [("stddev_file", "inputnode.in_stddev")]),
+        (physio, func_report_wf, [("rb", "inputnode.rb")]),
         (hmcwf, func_report_wf, [
             ("outputnode.out_fd", "inputnode.hmc_fd"),
             ("outputnode.out_file", "inputnode.hmc_epi"),

@@ -73,6 +73,7 @@ def init_func_report_wf(name="func_report_wf"):
                 "ica_report",
                 "meta_sidecar",
                 "name_source",
+                "rb"
             ]
         ),
         name="inputnode",
@@ -125,6 +126,7 @@ def init_func_report_wf(name="func_report_wf"):
         (inputnode, parcels, [("epi_parc", "segmentation")]),
         (inputnode, dilated_mask, [("brainmask", "in_mask")]),
         (inputnode, subtract_mask, [("brainmask", "in_subtract")]),
+        (inputnode, bigplot, [("rb", "rb")]),
         (spmask, spikes_bg, [("out_file", "in_mask")]),
         (dilated_mask, subtract_mask, [("out_mask", "in_base")]),
         (subtract_mask, parcels, [("out_mask", "crown_mask")]),

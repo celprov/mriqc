@@ -25,6 +25,7 @@ from os import path as op
 
 import nibabel as nb
 import numpy as np
+from bids import BIDSLayout
 from mriqc.qc.anatomical import efc, fber, snr, summary_stats
 from mriqc.qc.functional import gsr
 from mriqc.utils.misc import _flatten_dict
@@ -34,6 +35,7 @@ from nipype.interfaces.base import (
     InputMultiObject,
     isdefined,
     SimpleInterface,
+    Str,
     TraitedSpec,
     traits,
     Undefined,
@@ -426,3 +428,42 @@ def _get_echotime(inlist):
 
     if echo_time:
         return float(echo_time)
+    
+class _FindPhysioInputSpec(BaseInterfaceInputSpec):
+    layout = traits.Instance(BIDSLayout, desc='BIDSlayout object')
+    in_file = Str(mandatory=True, desc="path of input file")
+    subject_id = Str(mandatory=True, desc="the subject id")
+    session_id = traits.Either(None, Str, usedefault=True)
+    task_id = traits.Either(None, Str, usedefault=True)
+    acq_id = traits.Either(None, Str, usedefault=True)
+    rec_id = traits.Either(None, Str, usedefault=True)
+    run_id = traits.Either(None, traits.Int, usedefault=True)
+
+class _FindPhysioOutputSpec(TraitedSpec):
+    rb = File(desc="respiration-belt signal")
+
+class FindPhysio(SimpleInterface):
+    """
+    Find physiological signals in the BIDS dataset
+
+    """
+
+    input_spec = _FindPhysioInputSpec
+    output_spec = _FindPhysioOutputSpec
+
+    def _run_interface(self, runtime):
+
+        rb = self.layout.get(
+            datatype="func", 
+            suffix="physio",
+            recording = "respiratory",
+            extension = ".tsv.gz", 
+            session = self.session_id, 
+            subject = self.subject_id,
+            acquisition = self.acq_id,
+            reconstruction = self.rec_id,
+            run = self.run_id
+        )
+
+        self._results["rb"] = rb
+        return runtime
