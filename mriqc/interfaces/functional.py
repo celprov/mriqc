@@ -39,6 +39,7 @@ from nipype.interfaces.base import (
     Undefined,
 )
 from nipype.utils.misc import normalize_mc_params
+from niworkflows.utils.bids import corresponding_file
 import pandas as pd
 
 
@@ -607,3 +608,24 @@ def _get_echotime(inlist):
 
     if echo_time:
         return float(echo_time)
+    
+class _FindEventsInputSpec(BaseInterfaceInputSpec):
+    in_file = traits.Str(mandatory=True, desc="path of input file")
+
+class _FindEventsOutputSpec(TraitedSpec):
+    events = File(desc="events file")
+
+class FindEvents(SimpleInterface):
+    """
+    Find events file in the BIDS dataset
+
+    """
+
+    input_spec = _FindEventsInputSpec
+    output_spec = _FindEventsOutputSpec
+
+    def _run_interface(self, runtime):
+        from mriqc import config
+
+        self._results["events"] = corresponding_file(self.in_file, config.execution.layout, '_events.tsv')
+        return runtime
