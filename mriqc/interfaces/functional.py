@@ -611,14 +611,7 @@ def _get_echotime(inlist):
         return float(echo_time)
     
 class _FindPhysioInputSpec(BaseInterfaceInputSpec):
-    layout = traits.Instance(BIDSLayout, desc='BIDSlayout object')
     in_file = Str(mandatory=True, desc="path of input file")
-    subject_id = Str(mandatory=True, desc="the subject id")
-    session_id = traits.Either(None, Str, usedefault=True)
-    task_id = traits.Either(None, Str, usedefault=True)
-    acq_id = traits.Either(None, Str, usedefault=True)
-    rec_id = traits.Either(None, Str, usedefault=True)
-    run_id = traits.Either(None, traits.Int, usedefault=True)
 
 class _FindPhysioOutputSpec(TraitedSpec):
     rb = File(desc="respiration-belt signal")
@@ -633,18 +626,13 @@ class FindPhysio(SimpleInterface):
     output_spec = _FindPhysioOutputSpec
 
     def _run_interface(self, runtime):
+        from mriqc import config
 
-        rb = self.layout.get(
-            datatype="func", 
-            suffix="physio",
-            recording = "respiratory",
-            extension = ".tsv.gz", 
-            session = self.session_id, 
-            subject = self.subject_id,
-            acquisition = self.acq_id,
-            reconstruction = self.rec_id,
-            run = self.run_id
-        )
+        entities = config.execution.layout.get_file(self.in_file).get_entities()
+        entities.pop("extension", None)
+        entities.pop("echo", None)
+        entities.pop("part", None)
+        physio_filename = config.execution.layout.build_path(entities, extension='_recording-respiratory_physio.tsv.gz')
 
-        self._results["rb"] = rb
+        self._results["rb"] = physio_filename
         return runtime
