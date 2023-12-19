@@ -44,7 +44,7 @@ def init_func_report_wf(name="func_report_wf"):
     from niworkflows.interfaces.morphology import BinaryDilation, BinarySubtraction
 
     from nireports.interfaces import PlotMosaic, PlotSpikes
-    from mriqc.interfaces.functional import Spikes
+    from mriqc.interfaces.functional import Spikes, FindRespBelt
 
     # from mriqc.interfaces.reports import IndividualReport
 
@@ -73,7 +73,6 @@ def init_func_report_wf(name="func_report_wf"):
                 "ica_report",
                 "meta_sidecar",
                 "name_source",
-                "rb"
             ]
         ),
         name="inputnode",
@@ -106,6 +105,13 @@ def init_func_report_wf(name="func_report_wf"):
     subtract_mask = pe.Node(BinarySubtraction(), name="subtract_mask")
     parcels = pe.Node(niu.Function(function=_carpet_parcellation), name="parcels")
 
+    # Find physiological signals in BIDS dataset 
+    resp = pe.MapNode(
+        FindRespBelt(layout=config.execution.layout),
+        name = "resp",
+        iterfield=["in_file"],
+    )
+
     bigplot = pe.MapNode(
         FMRISummary(),
         name="BigPlot",
@@ -117,16 +123,18 @@ def init_func_report_wf(name="func_report_wf"):
     workflow.connect([
         (inputnode, spikes_bg, [("in_ras", "in_file")]),
         (inputnode, spmask, [("in_ras", "in_file")]),
+        (inputnode, resp, ("in_ras", "in_file")),
         (inputnode, bigplot, [("hmc_epi", "in_func"),
                               ("hmc_fd", "fd"),
                               ("fd_thres", "fd_thres"),
                               ("in_dvars", "dvars"),
                               ("outliers", "outliers"),
-                              (("meta_sidecar", _get_tr), "tr"),
-                              ("rb", "rb")]),
+                              (("meta_sidecar", _get_tr), "tr")]),
         (inputnode, parcels, [("epi_parc", "segmentation")]),
         (inputnode, dilated_mask, [("brainmask", "in_mask")]),
         (inputnode, subtract_mask, [("brainmask", "in_subtract")]),
+        (resp, bigplot, [("rb", "rb"),
+                           ("rb_unit", "rb_unit")]),
         (spmask, spikes_bg, [("out_file", "in_mask")]),
         (dilated_mask, subtract_mask, [("out_mask", "in_base")]),
         (subtract_mask, parcels, [("out_mask", "crown_mask")]),

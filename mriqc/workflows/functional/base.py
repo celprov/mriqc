@@ -69,7 +69,7 @@ def fmri_qc_workflow(name="funcMRIQC"):
     from niworkflows.interfaces.bids import ReadSidecarJSON
     from niworkflows.interfaces.header import SanitizeImage
     from mriqc.messages import BUILDING_WORKFLOW
-    from mriqc.interfaces.functional import SelectEcho, FindPhysio
+    from mriqc.interfaces.functional import SelectEcho
 
     workflow = pe.Workflow(name=name)
 
@@ -120,13 +120,6 @@ def fmri_qc_workflow(name="funcMRIQC"):
     )
 
     # Workflow --------------------------------------------------------
-
-    # Find physiological signals in BIDS dataset 
-    physio = pe.MapNode(
-        FindPhysio(layout=config.execution.layout),
-        name = "physio",
-        iterfield=["in_file"],
-    )
 
     # HMC: head motion correct
     hmcwf = hmc(omp_nthreads=config.nipype.omp_nthreads)
@@ -180,13 +173,6 @@ def fmri_qc_workflow(name="funcMRIQC"):
                         ("acquisition", "inputnode.acquisition"),
                         ("reconstruction", "inputnode.reconstruction"),
                         ("run", "inputnode.run")]),
-        (meta, physio, [("out_dict", "metadata"),
-                        (("subject",_pop), "subject_id"),
-                        (("session",_pop), "session_id"),
-                        (("task",_pop), "task_id"),
-                        (("acquisition",_pop), "acq_id"),
-                        (("reconstruction", _pop), "rec_id"),
-                        (("run", _pop), "run_id")]),
         (datalad_get, iqmswf, [("in_file", "inputnode.in_file")]),
         (sanitize, iqmswf, [("out_file", "inputnode.in_ras")]),
         (mean, iqmswf, [("out_file", "inputnode.epi_mean")]),

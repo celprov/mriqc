@@ -615,7 +615,7 @@ def _get_echotime(inlist):
         return float(echo_time)
     
 class _FindRespBeltInputSpec(BaseInterfaceInputSpec):
-    in_file = Str(mandatory=True, desc="path of input file")
+    in_file = traits.Str(mandatory=True, desc="path of input file")
 
 class _FindRespBeltOutputSpec(TraitedSpec):
     rb = File(desc="respiration-belt signal")
@@ -644,5 +644,4 @@ class FindRespBelt(SimpleInterface):
     
         self._results["rb"] = rb
         self._results["rb_unit"] = json_dict[col_idx]["Units"]
-        return runtime
         return runtime
