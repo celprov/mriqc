@@ -191,7 +191,8 @@ def fmri_qc_workflow(name="funcMRIQC"):
         (sanitize, iqmswf, [("out_file", "inputnode.in_ras")]),
         (mean, iqmswf, [("out_file", "inputnode.epi_mean")]),
         (hmcwf, iqmswf, [("outputnode.out_file", "inputnode.hmc_epi"),
-                         ("outputnode.out_fd", "inputnode.hmc_fd")]),
+                         ("outputnode.out_fd", "inputnode.hmc_fd"),
+                         ("outputnode.mpars", "inputnode.mpars")]),
         (tsnr, iqmswf, [("tsnr_file", "inputnode.in_tsnr")]),
         (non_steady_state_detector, iqmswf, [("n_volumes_to_discard", "inputnode.exclude_index")]),
         # Feed reportlet generation
@@ -297,7 +298,12 @@ def compute_iqms(name="ComputeIQMs"):
     from nipype.algorithms.confounds import ComputeDVARS
     from nipype.interfaces.afni import OutlierCount, QualityIndex
 
-    from mriqc.interfaces import FunctionalQC, IQMFileSink
+    from mriqc.interfaces import (
+        DerivativesDataSink,
+        FunctionalQC,
+        IQMFileSink,
+        GatherTimeseries
+    )
     from mriqc.interfaces.reports import AddProvenance
     from mriqc.interfaces.transitional import GCOR
     from mriqc.workflows.utils import _tofloat, get_fwhmx
@@ -317,6 +323,7 @@ def compute_iqms(name="ComputeIQMs"):
                 "fd_thres",
                 "in_tsnr",
                 "metadata",
+                "mpars",
                 "exclude_index",
                 "subject",
                 "session",
@@ -380,6 +387,13 @@ def compute_iqms(name="ComputeIQMs"):
         iterfield=["in_epi", "in_hmc", "in_tsnr", "in_dvars", "in_fwhm"],
     )
 
+    timeseries = pe.MapNode(
+        GatherTimeseries(mpars_source="AFNI"),
+        name="timeseries",
+        mem_gb=mem_gb * 3,
+        iterfield=["dvars", "outliers", "quality", "fd"]
+    )
+
     # fmt: off
     workflow.connect([
         (inputnode, dvnode, [("hmc_epi", "in_file"),
@@ -400,7 +414,11 @@ def compute_iqms(name="ComputeIQMs"):
         (dvnode, measures, [("out_all", "in_dvars")]),
         (fwhm, measures, [(("fwhm", _tofloat), "in_fwhm")]),
         (dvnode, outputnode, [("out_all", "out_dvars")]),
-        (outliers, outputnode, [("out_file", "outliers")])
+        (outliers, outputnode, [("out_file", "outliers")]),
+        (outliers, timeseries, [("out_file", "outliers")]),
+        (quality, timeseries, [("out_file", "quality")]),
+        (dvnode, timeseries, [("out_all", "dvars")]),
+        (inputnode, timeseries, [("hmc_fd", "fd"), ("mpars", "mpars")]),
     ])
     # fmt: on
 
@@ -423,6 +441,17 @@ def compute_iqms(name="ComputeIQMs"):
         iterfield=["in_file", "root", "metadata", "provenance"],
     )
 
+    # Save timeseries TSV file
+    ds_timeseries = pe.MapNode(
+        DerivativesDataSink(
+            base_directory=str(config.execution.output_dir),
+            suffix="timeseries"
+        ),
+        name="ds_timeseries",
+        run_without_submitting=True,
+        iterfield=["in_file", "source_file", "meta_dict"],
+    )
+
     # fmt: off
     workflow.connect([
         (inputnode, addprov, [("in_file", "in_file")]),
@@ -441,6 +470,9 @@ def compute_iqms(name="ComputeIQMs"):
         (quality, datasink, [(("out_file", _parse_tqual), "aqi")]),
         (measures, datasink, [("out_qc", "root")]),
         (datasink, outputnode, [("out_file", "out_file")]),
+        (inputnode, ds_timeseries, [("in_file", "source_file")]),
+        (timeseries, ds_timeseries, [("timeseries_file", "in_file"),
+                                     ("timeseries_metadata", "meta_dict")]),
     ])
     # fmt: on
 
@@ -524,7 +556,10 @@ def hmc(name="fMRI_HMC", omp_nthreads=None):
         name="inputnode",
     )
 
-    outputnode = pe.Node(niu.IdentityInterface(fields=["out_file", "out_fd"]), name="outputnode")
+    outputnode = pe.Node(
+        niu.IdentityInterface(fields=["out_file", "out_fd", "mpars"]),
+        name="outputnode",
+    )
 
     # calculate hmc parameters
     estimate_hm = pe.Node(
@@ -554,6 +589,7 @@ def hmc(name="fMRI_HMC", omp_nthreads=None):
         (estimate_hm, apply_hmc, [("oned_matrix_save", "in_xfm")]),
         (apply_hmc, outputnode, [("out", "out_file")]),
         (estimate_hm, fdnode, [("oned_file", "in_file")]),
+        (estimate_hm, outputnode, [("oned_file", "mpars")]),
         (fdnode, outputnode, [("out_file", "out_fd")]),
     ])
     # fmt: on
