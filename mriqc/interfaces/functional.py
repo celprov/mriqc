@@ -23,6 +23,7 @@
 from __future__ import annotations
 from os import path as op
 
+import json
 import nibabel as nb
 import numpy as np
 from bids import BIDSLayout
@@ -41,8 +42,11 @@ from nipype.interfaces.base import (
     Undefined,
 )
 from nipype.utils.misc import normalize_mc_params
+from niworkflows.utils.bids import corresponding_file
 import pandas as pd
 
+RESP_BELT_KEY = ["belt"]
+"""Possible key name for the respiration belt signal in the physio JSON"""
 
 class FunctionalQCInputSpec(BaseInterfaceInputSpec):
     in_epi = File(exists=True, mandatory=True, desc="input EPI file")
@@ -610,29 +614,35 @@ def _get_echotime(inlist):
     if echo_time:
         return float(echo_time)
     
-class _FindPhysioInputSpec(BaseInterfaceInputSpec):
+class _FindRespBeltInputSpec(BaseInterfaceInputSpec):
     in_file = Str(mandatory=True, desc="path of input file")
 
-class _FindPhysioOutputSpec(TraitedSpec):
+class _FindRespBeltOutputSpec(TraitedSpec):
     rb = File(desc="respiration-belt signal")
 
-class FindPhysio(SimpleInterface):
+class FindRespBelt(SimpleInterface):
     """
-    Find physiological signals in the BIDS dataset
+    Find the respiration belt signal in the BIDS dataset
 
     """
 
-    input_spec = _FindPhysioInputSpec
-    output_spec = _FindPhysioOutputSpec
+    input_spec = _FindRespBeltInputSpec
+    output_spec = _FindRespBeltOutputSpec
 
     def _run_interface(self, runtime):
         from mriqc import config
 
-        entities = config.execution.layout.get_file(self.in_file).get_entities()
-        entities.pop("extension", None)
-        entities.pop("echo", None)
-        entities.pop("part", None)
-        physio_filename = config.execution.layout.build_path(entities, extension='_recording-respiratory_physio.tsv.gz')
+        physio_file = corresponding_file(self.in_file, config.execution.layout, '_recording-respiratory_physio.tsv.gz')
+        physio_json = corresponding_file(physio_file, config.execution.layout, '_physio.json')
 
-        self._results["rb"] = physio_filename
+        with open(physio_json, 'r') as f:
+            json_dict = json.load(f)
+
+        col_idx = [key for key, value in json_dict.items() if value in RESP_BELT_KEY]
+
+        rb  = [np.nan] + np.loadtxt(self.inputs.rb, usecols=[col_idx]).tolist()
+    
+        self._results["rb"] = rb
+        self._results["rb_unit"] = json_dict[col_idx]["Units"]
+        return runtime
         return runtime
