@@ -107,7 +107,7 @@ def init_func_report_wf(name="func_report_wf"):
 
     # Find physiological signals in BIDS dataset 
     resp = pe.MapNode(
-        FindRespBelt(layout=config.execution.layout),
+        FindRespBelt(),
         name = "resp",
         iterfield=["in_file"],
     )
@@ -134,7 +134,7 @@ def init_func_report_wf(name="func_report_wf"):
         (inputnode, dilated_mask, [("brainmask", "in_mask")]),
         (inputnode, subtract_mask, [("brainmask", "in_subtract")]),
         (resp, bigplot, [("rb", "rb"),
-                           ("rb_unit", "rb_unit")]),
+                        ("rb_unit", "rb_unit")]),
         (spmask, spikes_bg, [("out_file", "in_mask")]),
         (dilated_mask, subtract_mask, [("out_mask", "in_base")]),
         (subtract_mask, parcels, [("out_mask", "crown_mask")]),

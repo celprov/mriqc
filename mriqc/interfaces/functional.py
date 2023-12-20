@@ -615,10 +615,11 @@ def _get_echotime(inlist):
         return float(echo_time)
     
 class _FindRespBeltInputSpec(BaseInterfaceInputSpec):
-    in_file = traits.Str(mandatory=True, desc="path of input file")
+    in_file = File(exists=True, mandatory=True, desc="input fMRI dataset")
 
 class _FindRespBeltOutputSpec(TraitedSpec):
-    rb = File(desc="respiration-belt signal")
+    rb = traits.List(traits.Float(), desc="respiration-belt signal")
+    rb_unit = traits.Str(desc="units of the respiration belt")
 
 class FindRespBelt(SimpleInterface):
     """
@@ -638,9 +639,21 @@ class FindRespBelt(SimpleInterface):
         with open(physio_json, 'r') as f:
             json_dict = json.load(f)
 
-        col_idx = [key for key, value in json_dict.items() if value in RESP_BELT_KEY]
+        col_idx = None
+        for key_name in RESP_BELT_KEY:
+            try:
+                col_idx = json_dict['Columns'].index(key_name)
+                break
+            except ValueError:
+                pass
 
-        rb  = [np.nan] + np.loadtxt(self.inputs.rb, usecols=[col_idx]).tolist()
+        if col_idx is None:
+            raise ValueError(f"Your physio JSON does not encode the respiration belt information in a way known to the software. \
+                                Known keys are {RESP_BELT_KEY}. Please contribute to MRIQC by adding your key as a possible value \
+                                in the mriqc.interfaces.functional.py.RESP_BELT_KEY list.")
+
+
+        rb  = [np.nan] + np.loadtxt(physio_file, usecols=[col_idx]).tolist()
     
         self._results["rb"] = rb
         self._results["rb_unit"] = json_dict[col_idx]["Units"]

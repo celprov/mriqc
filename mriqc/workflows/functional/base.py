@@ -188,7 +188,6 @@ def fmri_qc_workflow(name="funcMRIQC"):
         (sanitize, func_report_wf, [("out_file", "inputnode.in_ras")]),
         (mean, func_report_wf, [("out_file", "inputnode.epi_mean")]),
         (tsnr, func_report_wf, [("stddev_file", "inputnode.in_stddev")]),
-        (physio, func_report_wf, [("rb", "inputnode.rb")]),
         (hmcwf, func_report_wf, [
             ("outputnode.out_fd", "inputnode.hmc_fd"),
             ("outputnode.out_file", "inputnode.hmc_epi"),
